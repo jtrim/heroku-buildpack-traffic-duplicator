@@ -1,0 +1,55 @@
+#!/usr/bin/env ruby
+
+app_port = Integer(ENV['PORT']) + 1
+gor_port = Integer(ENV['PORT']) + 2
+
+def start_app
+  fork do
+    cmd = "PORT=#{app_port} #{ARGV.join(' ').sub(/#{ENV['PORT']}/, app_port.to_s)}"
+    puts "buildpack=traffic-duplicator at=start-app cmd=#{cmd}"
+    exec cmd
+  end
+end
+
+def start_gor
+  fork do
+    additional_gor_options = \
+      if File.exist?('config/gor.options')
+        File.read('config/gor.options').chomp.split("\n").join(' ')
+      else
+        ''
+      end
+
+    cmd = "bin/gor --input-http :#{gor_port} #{additional_gor_options}"
+    puts "buildpack=traffic-duplicator at=start-gor cmd=#{cmd}"
+    exec cmd
+  end
+end
+
+def start_em_proxy
+  fork do
+    cmd = "bundle exec em-proxy -l #{ENV['PORT']} -r '127.0.0.1:#{app_port}' -d '127.0.0.1:#{gor_port}' -v"
+    puts "buildpack=traffic-duplicator at=start-em-proxy cmd=#{cmd}"
+    exec cmd
+  end
+end
+
+app_pid      = start_app
+gor_pid      = start_gor
+em_proxy_pid = start_em_proxy
+
+process_name = \
+  case Process.wait
+  when app_pid
+    Process.kill('INT', gor_pid, em_proxy_pid)
+    'app'
+  when em_proxy_pid
+    Process.kill('INT', gor_pid, app_pid)
+    'em-proxy'
+  when gor_pid
+    Process.kill('INT', em_proxy_pid, app_pid)
+    'gor'
+  end
+
+puts "buildpack=traffic-duplicator at=exit process=#{process_name}"
+exit 1

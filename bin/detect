@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# bin/detect <build-dir>
+
+if [ -z "$(cat $1/Gemfile.lock | grep em-proxy)" ]; then
+  echo "em-proxy buildpack error: 'em-proxy' not found in Gemfile.lock"
+  exit 1
+else
+  echo 'em-proxy'
+  exit 0
+fi

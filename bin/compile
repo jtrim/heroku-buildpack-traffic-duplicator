@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+set -e
+
+indent() {
+  sed 's/^/       /'
+}
+
+arrow() {
+  sed 's/^/-----> /'
+}
+
+mkdir -p "$1/bin/"
+
+cp "bin/gor" "$1/bin/gor"
+chmod +x "$1/bin/gor"
+echo "Installed gor to app/bin" | indent
+
+cp "bin/start-traffic-duplicator" "$1/bin/start-traffic-duplicator"
+chmod +x "$1/bin/start-traffic-duplicator"
+echo "Installed start-traffic-duplicator to app/bin" | indent
+
+exit 0
