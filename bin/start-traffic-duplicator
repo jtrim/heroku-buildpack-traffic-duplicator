@@ -1,9 +1,14 @@
 #!/usr/bin/env ruby
 
-app_port = Integer(ENV['PORT']) + 1
-gor_port = Integer(ENV['PORT']) + 2
+def self.app_port
+  Integer(ENV['PORT']) + 1
+end
 
-def start_app
+def self.gor_port
+  Integer(ENV['PORT']) + 2
+end
+
+def self.start_app
   fork do
     cmd = "PORT=#{app_port} #{ARGV.join(' ').sub(/#{ENV['PORT']}/, app_port.to_s)}"
     puts "buildpack=traffic-duplicator at=start-app cmd=#{cmd}"
@@ -11,7 +16,7 @@ def start_app
   end
 end
 
-def start_gor
+def self.start_gor
   fork do
     additional_gor_options = \
       if File.exist?('config/gor.options')
@@ -20,15 +25,16 @@ def start_gor
         ''
       end
 
-    cmd = "bin/gor --input-http :#{gor_port} #{additional_gor_options}"
+    cmd = "bin/gor --input-http :#{gor_port} #{additional_gor_options} 2>&1 | sed -u 's/^/gor: /g'"
     puts "buildpack=traffic-duplicator at=start-gor cmd=#{cmd}"
     exec cmd
   end
 end
 
-def start_em_proxy
+def self.start_em_proxy
   fork do
-    cmd = "bundle exec em-proxy -l #{ENV['PORT']} -r '127.0.0.1:#{app_port}' -d '127.0.0.1:#{gor_port}' -v"
+    print_verbosely = ENV['EM_PROXY_VERBOSE'] == 'true'
+    cmd = "bundle exec em-proxy -l #{ENV['PORT']} -r '127.0.0.1:#{app_port}' -d '127.0.0.1:#{gor_port}' #{print_verbosely && '-v'} 2>&1 | sed -u 's/^/em-proxy: /g'"
     puts "buildpack=traffic-duplicator at=start-em-proxy cmd=#{cmd}"
     exec cmd
   end
