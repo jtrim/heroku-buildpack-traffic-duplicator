@@ -66,3 +66,40 @@ web: start-traffic-duplicator bundle exec rails s -p $PORT
 ```
 
 Now, deploy your application. Requests will be duplicated from the Heroku dyno(s) running your production application to the downstream application(s) you've specified.
+
+### How does it work?
+
+During a deploy, Heroku runs `bin/detect`, `bin/compile`, and `bin/release` for every buildpack present. The `bin/compile` script in this library copies `bin/gor` and `bin/start-traffic-duplicator` to your application's `bin` directory.
+
+Now, given the example application above, Heroku would normally run `bundle exec rails s -p $PORT` to start the Rails application, where `$PORT` is an environment variable set by Heroku that corresponds to the network port the application will serve traffic on. When we change the Procfile entry to `start-traffic-duplicator bundle exec rails s -p $PORT`, Heroku instead starts the wrapper script, supplying the `bundle exec ...` bit as arguments.
+
+`start-traffic-duplicator`'s job is to start three processes (forgive the slight pseudocode):
+
+- your application, via `bundle exec rails s -p $PORT`, which is reconfigured to listen on `$PORT+1`
+- `gor`, via `gor --input-http :$PORT+2` and any additional options you've specified in `config/gor.options`
+- `em-proxy`, via `bundle exec em-proxy -l $PORT -r 127.0.0.1:$PORT+1 -d 127.0.0.1:$PORT+2`
+
+In other words, `em-proxy` takes your application's place by binding to `$PORT`. Upon receiving a request, `em-proxy` relays that request to your application on `$PORT+1` and duplicates the traffic to `gor` on `$PORT+2`, discarding the response from `gor`.
+
+### Caveats
+
+- This trio of processes currently depends on the loopback interface local to the Heroku dyno. This implies a couple of things:
+  - There is going to be a very very very slight performance hit associated with using the loopback interface for gor and your application. For 99% of you who'd like to use this library, **that hit will be negligible**. However, if you're squeezing every last bit of performance out of Heroku's dynos, and your application's performance hangs in a delicate balance, you may want to take that into consideration
+  - Heroku exposes `$PORT`, and this buildpack uses `$PORT+1` and `$PORT+2` with reckless abandon. In other words, if you've built yourself a complex ecosystem of processes that also listen on the loopback interface, you may end up with conflicts
+- While `em-proxy` has the ability to relay to unix sockets, the straightforward option is to use the loopback interface. If you want this functionality, I'm happy to accept pull requests!
+
+### Contributing
+
+- Fork it
+- Create your feature branch (git checkout -b my-new-feature)
+- Commit your changes (git commit -am 'Added some feature')
+- Push to the branch (git push origin my-new-feature)
+- Create new Pull Request
+
+### License
+
+`em-proxy`: The MIT License - Copyright (c) 2010 Ilya Grigorik   
+`gor`: [Apache License Version 2.0](https://github.com/buger/gor/blob/master/LICENSE.txt)
+
+
+Everything else: The MIT License - Copyright (c) 2015 Jesse Trimble
